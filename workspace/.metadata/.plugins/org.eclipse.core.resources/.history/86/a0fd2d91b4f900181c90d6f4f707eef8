@@ -1,0 +1,346 @@
+/**
+ * @ (#) ServicioDatosImpl.java
+ * 
+ * Clase que implementa la interfaz remota ServicioDatosInterface.
+ * Desarrolla las funciones de una base de datos que relacione Usuarios-Seguidores-Trinos.
+ * Mantiene la lista de usuarios registrados y/o conectados al sistema, junto con sus seguidores y trinos;
+ * y los relaciona permitiendo operaciones tipicas de consulta, añadir y borrado.
+ *
+ * @author Yassine Marroun Nettah
+ * ymarroun1@alumno.uned.es
+ */
+package basedeDatos;
+
+import java.io.File;
+import java.net.MalformedURLException;
+import java.rmi.NotBoundException;
+import java.rmi.RemoteException;
+import java.rmi.server.UnicastRemoteObject;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.Iterator;
+import java.util.List;
+import java.util.Map;
+
+import common.GUI;
+import common.ServicioDatosInterface;
+import common.Trino;
+import common.UsuarioObj;
+
+public class ServicioDatosImpl extends UnicastRemoteObject implements ServicioDatosInterface{
+	
+	private static final long serialVersionUID = 123711131719L;
+	private Map<String, UsuarioObj> listaUsuarios = new HashMap<String, UsuarioObj>();
+	
+	//Carpeta donde se mantiene la Persistencia.
+	private static String carpetaPersistencia = "persistencia";
+	
+
+	/**
+	 * Contructor necesario al extender UnicastRemoteOBject y poder utilizar Naming.
+	 * @throws RemoteException
+	 * @throws NotBoundException 
+	 * @throws MalformedURLException 
+	 */
+	public ServicioDatosImpl() throws RemoteException, MalformedURLException, NotBoundException {
+		super();
+		
+		//Se cargan los datos persistentes.
+		File persistencia = new File (carpetaPersistencia);
+		if (persistencia.exists()){
+			GUI.imprime("Existe carpeta de Persistencia; recuperados los datos");
+		}else{
+			GUI.imprime("Carpeta " + carpetaPersistencia + " no existente");
+			inicializarTablas();
+			persistencia.mkdir();						
+		}
+	}
+	
+	
+	/**
+	 * Procede a registrar un usuario en la Base de Datos.
+	 * @param UsuarioObj usuario, recibe un objeto usuario para registrar
+	 * @return int -1 si ya existe un usuario con el nick recibido, int 0 si el registro es correcto
+	 * @throws RemoteException 
+	 * @throws NotBoundException 
+	 * @throws MalformedURLException 
+	 */
+	@Override
+	public int registrarUsuario(UsuarioObj usuario) throws RemoteException, MalformedURLException, NotBoundException{
+
+		if (listaUsuarios.containsKey(usuario.getNick())) {
+			return -1; //Existe un usuario con ese NICK
+		}
+		else {
+			listaUsuarios.put(usuario.getNick(), usuario);
+			return 0; //Usuario registrado correctamente
+		}
+	}
+	
+	
+	/**
+	 * Procede a autenticar  al usuario en la Base de Datos.	
+	 * @param String nick, String password, datos del usuario para autenticarse
+	 * @return int 0 si la autenticacion es correcta, int -1 si el password no es correcto, int -2 si no existe el usuario
+	 * @throws RemoteException
+	 * @throws MalformedURLException
+	 * @throws NotBoundException
+	 */
+	@Override
+	public int autenticarUsuario(String nick, String password) throws RemoteException, MalformedURLException, NotBoundException{
+		if (listaUsuarios.containsKey(nick)) {
+			UsuarioObj usuario = listaUsuarios.get(nick);
+			if (usuario.getPassword().equals(password)) {
+				return 0; //Autenticacion correcta
+			} else {
+				return -1; //Password incorrecto
+			}
+		} else {
+			return -2; //Usuario inexistente
+		}
+	}
+	
+	
+	/**
+	 * Localiza al usuario con su Nick, obtiene su lista de trinos e incluye en ella el nuevo trino.	
+	 * @param String mensaje, String nick, datos para el trino
+	 * @return boolean
+	 * @throws RemoteException
+	 * @throws MalformedURLException
+	 * @throws NotBoundException
+	 */
+	@Override
+	public boolean enviarTrino(String mensaje, String nick)throws RemoteException, MalformedURLException, NotBoundException {
+		
+		UsuarioObj usuario = listaUsuarios.get(nick);
+		ArrayList<Trino> lista = usuario.getTrinosLista();
+		Trino trino = new Trino(mensaje, nick);
+		lista.add(trino);
+		return true;
+	}
+	
+	
+	/**
+	 * Accede al mapa de usuarios para devolver un listado de ellos.
+	 * @return ArrayList<UsuarioObj> uuariosLista, el metodo devuelve una lista de tipo UsuarioObj
+	 * @throws RemoteException
+	 * @throws MalformedURLException
+	 * @throws NotBoundException
+	 * */
+	public ArrayList<UsuarioObj> listarUsuarios()throws RemoteException, MalformedURLException, NotBoundException {
+		
+		ArrayList<UsuarioObj> usuariosLista = new ArrayList<UsuarioObj>(listaUsuarios.values());
+		return usuariosLista;
+	}
+	
+	
+	/**
+	 * Localiza al usuario con su Nick, obtiene su lista de seguidores y nos incluye en ella.	
+	 * @param String nick, String miNick, nick del usuario a seguir, y miNick para ser incluido en su lista de seguidores
+	 * @return int -1 si no se encuentra al usuario, int 0 si seguimos al usuario correctamente
+	 * @throws RemoteException
+	 * @throws MalformedURLException
+	 * @throws NotBoundException
+	 */
+	@Override
+	public int seguirA(String nick, String miNick)throws RemoteException, MalformedURLException, NotBoundException {
+		
+		if (listaUsuarios.containsKey(nick)) {
+			UsuarioObj usuario = listaUsuarios.get(nick);
+			ArrayList<String> seguidores = usuario.getSeguidores();
+			seguidores.add(miNick);
+			return 0; //Incluido en la lista de seguidores del usuario
+		} else {
+			return -1; //No existe usuario
+		}
+	}
+	
+	
+	/**
+	 * Localiza al usuario con su Nick, obtiene su lista de seguidores y nos elimina de ella.	
+	 * @param String nick, nick del usuario
+	 * @return int -1 si no se encuentra al usuario, int 0 si hemos sido eliminados de su lista de seguidores
+	 * @throws RemoteException
+	 * @throws MalformedURLException
+	 * @throws NotBoundException
+	 */
+	@Override
+	public int dejarSeguirA(String nick, String miNick)throws RemoteException, MalformedURLException, NotBoundException {
+		
+		if (listaUsuarios.containsKey(nick)) {
+			UsuarioObj usuario = listaUsuarios.get(nick);
+			ArrayList<String> seguidores = usuario.getSeguidores();
+			seguidores.remove(miNick);
+			return 0; //Eliminado de la lista de seguidores del usuario
+		} else {
+			return -1; //No existe usuario
+		}
+	}
+	
+	
+	
+////////////////////////////////////////////////////////////////////////////////////////////
+	
+	/////////////////////////////////////////////////////////////////////////////////////////////	
+	//Estructuras que mantienen las autenticaciones VOLATILES
+	private Map<Integer, String> sesionCliente = new HashMap<Integer, String>();
+	private Map<String, Integer> clienteSesion = new HashMap<String, Integer>();
+	private Map<Integer, String> sesionRepositorio = new HashMap<Integer, String>();
+	private Map<String, Integer> repositorioSesion = new HashMap<String, Integer>();
+	//Estructuras que mantiene el almacen de Clientes y Repositorios registrados PERSISTENTES
+	private Map<Integer, String> almacenIdCliente;// = new HashMap<Integer, String>();
+	private Map<String, Integer> almacenClienteId;// = new HashMap<String, Integer>();
+	private Map<Integer, String> almacenIdRepositorio;// = new HashMap<Integer, String>();
+	private Map<String, Integer> almacenRepositorioId;// = new HashMap<String, Integer>();
+	private Map<Integer,Integer> almacenClienteRepositorio;// = new HashMap<Integer,Integer>();
+	//necesitamos tambien a cada cliente quien le ha compartido
+	private Map<Integer,List<Integer>> almacenClienteFicheros;// = new HashMap<Integer,List<Integer>>();
+	/////////////////////////////////////////////////////////////////////////////////////////////
+	
+	/**
+	 * inicializa las tablas para ser guardadas
+	 */
+	public void inicializarTablas(){
+		almacenIdCliente = new HashMap<Integer, String>();
+		almacenClienteId = new HashMap<String, Integer>();
+		almacenIdRepositorio = new HashMap<Integer, String>();
+		almacenRepositorioId = new HashMap<String, Integer>();
+		almacenClienteRepositorio = new HashMap<Integer,Integer>();
+		almacenClienteFicheros = new HashMap<Integer,List<Integer>>();
+	}
+	
+	/**
+	 * registra un repositiorio
+	 * @param String el nombre del repositorio
+	 * @param int el id sesion del repositorio
+	 * @return int 0 si ya esta registrada con ese nombre, el id sesion en caso contrario
+	 */
+	@Override
+	public int registrarRepositorio(String nombre, int id) throws RemoteException {
+		if (almacenRepositorioId.containsKey(nombre)) return 0;//ya esta registrada
+		else {
+			almacenRepositorioId.put(nombre, id);
+			almacenIdRepositorio.put(id, nombre);
+		}
+		return id;
+	}
+
+	/**
+	 * devulve la lsita de lcientes con un formato basico de presentacion de datos similar a toString()
+	 * se muestran todos los clientes registrado y se indican si estan online o no.
+	 * @return String la lista de los cliente formateada
+	 */
+    @Override
+    public String listaClientes() throws RemoteException {
+         String clientes = "";
+         for (String nombre : almacenIdCliente.values()) {
+        	 int id = almacenClienteId.get(nombre);
+        	 int estado = 0;
+        	 if (clienteSesion.containsKey(nombre)) estado = 1;
+     		String s = "";
+    		if (estado == 0 ) s = "[OFFLINE]";else s = "[ ONLINE]";
+    		clientes = clientes + "Cliente ["+ s + " id=" + id + ", nombre=" + nombre + "] ";
+         }              
+         return clientes;
+    }
+
+    /**
+     * devuelve la lista de repositorios con un formato basico de presentacion
+     * se muestran todas las repos registradas y si estan online o no
+     * @return String la lista de las repos formateada
+     */
+	@Override
+	public String listaRepositorios() throws RemoteException {
+		String lista = "";
+		
+		Iterator it = almacenIdRepositorio.entrySet().iterator();
+		
+		while (it.hasNext()){
+			Map.Entry e = (Map.Entry)it.next();
+			int id = (Integer) e.getKey();
+			String nombre = (String) e.getValue();
+       	 	int estado = 0;
+       	 	if (repositorioSesion.containsKey(nombre)) estado = 1;
+    		String s = "";
+    		if (estado == 0 ) s = "[OFFLINE]";else s = "[ ONLINE]";
+    		lista = lista + "Repositorio ["+ s + " id=" + id + ", nombre=" + nombre + "] ";
+		}
+		return lista;
+		
+	}
+
+	/**
+	 * Elimina a un cliente de las sesion activas
+	 * ojo!!!!! no lo borra del almacen de usuarios registrados, solo cierra la sesion
+	 * podriamos devolver algun codigo de error, pero pasamos de momento
+	 * @param sesion el identificador de la sesion actual
+	 * @return int devuelve 0 sin error otro valor si hay error
+	 */
+/*	@Override
+	public String desconectarCliente(int sesion) throws RemoteException {
+		String cliente = sesionCliente.get(sesion);
+		sesionCliente.remove(sesion);
+		clienteSesion.remove(cliente);
+		return cliente;
+	}
+*/
+	/**
+	 * borra la entrada de sesion de una repo, es decir desconecta la repo
+	 * @param int el id sesion de la repo
+	 * @return String el nombre de la repo desconectada
+	 */
+	@Override
+	public String desconectarRepositorio(int sesion) throws RemoteException {
+		String repo = sesionRepositorio.get(sesion);
+		sesionRepositorio.remove(sesion);
+		repositorioSesion.remove(repo);
+		return repo;
+	}
+
+
+	/**
+	 * almacena en las tablas un fichero
+	 * @param String el nombre del fichero que queremos subir a la repo
+	 * @param int el id sesion del cliente que va a subir el fichero
+	 * @return el id del cliente que es la carpeta donde se va a subir el fichero
+	 */
+	public int almacenarFichero(String nombreFichero, int idSesionCliente) {
+		//Construimos los metadatos y los almacenamos
+		String nombreCliente = sesionCliente.get(idSesionCliente);
+		int idCliente = almacenClienteId.get(nombreCliente);
+		int idRepositorio = almacenClienteRepositorio.get(idCliente);		
+		List<Integer> l = new ArrayList<Integer>();//la lista de con quien se ha compartido		
+
+		//ahora vamos a agregar el fichero al almacenClienteFicheros
+		//conseguimos la lista de ficheros de este cliente:
+		List<Integer> listaFicheros = almacenClienteFicheros.get(idCliente);
+			GUI.imprime("El fichero ya estaba en la lista, no se han tomado medidas");
+				
+		return idCliente;
+	}
+	
+	/**
+	 * borra todas las entradas de un fichero para los clientes que le pasamos
+	 * @param idFichero el id del fichero a borrar
+	 * @param listaClientes la lista de id donde estan los ficheros
+	 */
+	private void borraDeAlmacenClienteFicheros(int idFichero, List<Integer> listaClientes){
+		System.out.println(almacenClienteFicheros);//vemos la lista antes del borrado
+		for (Integer i : listaClientes){
+			List<Integer> lista = almacenClienteFicheros.get(i);
+			lista.remove(lista.indexOf(idFichero));
+		}
+		System.out.println(almacenClienteFicheros);//vemos la lista despues del borrado, queda la propia entrada de quien llama
+	}
+
+	/**
+	 * devuelve el id unico de un cliente a partir del id sesion
+	 * @param int el id sesion del cliente
+	 * @return int el id unico del cliente
+	 */
+	@Override
+	public int sesion2id(int idsesion){
+		return almacenClienteId.get(sesionCliente.get(idsesion));
+	}
+		
+}

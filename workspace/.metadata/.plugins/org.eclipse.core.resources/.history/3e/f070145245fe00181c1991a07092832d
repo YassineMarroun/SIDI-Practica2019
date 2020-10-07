@@ -1,0 +1,166 @@
+/**
+ * @ (#) Servidor.java
+ * 
+ * Clase que contiene el main de la entidad Servidor.
+ * Se encarga de controlar el proceso de autenticacion de los usuarios y gestion de sus mensajes(trinos).
+ *
+ * @author Yassine Marroun Nettah
+ * ymarroun1@alumno.uned.es
+ */
+package servidor;
+
+import java.net.MalformedURLException;
+import java.rmi.ConnectException;
+import java.rmi.Naming;
+import java.rmi.NotBoundException;
+import java.rmi.RemoteException;
+import java.rmi.registry.LocateRegistry;
+import java.rmi.registry.Registry;
+import java.rmi.server.UnicastRemoteObject;
+
+import common.GUI;
+import common.ServicioAutenticacionInterface;
+import common.ServicioDatosInterface;
+import common.Utiles;
+
+public class Servidor {
+	
+	private static int puertoServidor = 8816;
+	private static int puertoBaseDatos = 8817;
+	private static Registry registryServidor;
+	private static String direccionServidor = "localhost";
+	
+	private static ServicioDatosInterface servicioDatos;
+	
+	//Aqui se van a guardar las URL RMI
+	private static String basedatos;
+	
+	/**
+	 * main, Arranca el Registry. Bindea los servicios de Autenticacion y Gestor.
+	 * Imprime el menu de opciones. Cuando sale del menu debe eliminar los servicios y el Registry.
+	 * @param args
+	 * @throws Exception
+	 */
+	public static void main(String[] args) throws Exception{
+		
+		String URLRegistro;
+		
+		//Se levanta el registro
+		arrancarRegistro(puertoServidor);
+		
+		//Ubicacion de la clase
+		Utiles.setCodeBase(ServicioAutenticacionInterface.class);
+
+		//Levantar Autenticador
+		ServicioAutenticacionImpl objetoAutenticador = new ServicioAutenticacionImpl();
+		URLRegistro = "rmi://" + direccionServidor + ":" + puertoServidor + "/Autenticador";
+		Naming.rebind(URLRegistro, objetoAutenticador);
+		System.out.println("Operacion: Servicio Autenticador preparado con exito");
+		
+		//Levantar Gestor
+		ServicioGestorImpl objetoGestor = new ServicioGestorImpl();
+		URLRegistro = "rmi://" + direccionServidor + ":" + puertoServidor + "/Gestor";
+		Naming.rebind(URLRegistro, objetoGestor);
+		System.out.println("Operacion: Servicio Gestor preparado con exito");
+		
+		listRegistry("rmi://" + direccionServidor + ":" + puertoServidor);
+		
+		
+		basedatos = "rmi://" + direccionServidor + ":" + puertoBaseDatos + "/BaseDatos";
+		
+		new Servidor().iniciar();
+		//System.exit(0); //Finaliza el programa, return a menu.
+	}	
+	
+	
+	/**
+	 * Conecta con el servicio de Datos y muestra el Menu de SERVIDOR.
+	 * @throws Exception
+	 */
+	private void iniciar() throws Exception {
+		
+		String URLDatos = basedatos; //RMI
+		
+		//Si Base de Datos no esta disponible, cierra informando de ello
+		try{
+			servicioDatos = (ServicioDatosInterface) Naming.lookup(URLDatos);
+					
+			//Mostrar menu de Base de Datos
+			int opcion = 0;
+			do{			
+				opcion = GUI.menu("del SERVIDOR",new String[]{
+						"Informacion del Servidor","Listar Usuarios Logeados"});
+				switch(opcion){
+					//case 1: infoServidor(); break;
+					//case 2: listarUsuariosLOG(); break;
+					case 3: cerrarServidor(); break;
+				}
+			}while (opcion!=3);
+		}catch (ConnectException e){
+			System.out.println("Error de conexion, la Base de Datos no esta disponible, vuelva a intentarlo");
+			String st = GUI.pideDato("Pulse enter para finalizar...");
+		}	
+	}
+	
+	
+	private void cerrarServidor() throws RemoteException, MalformedURLException, NotBoundException {
+		
+		String URLRegistro;
+		
+		//Eliminar Gestor
+		System.out.println("Operacion: Servicio Gestor cerrandose...");
+		URLRegistro = "rmi://" + direccionServidor + ":" + puertoServidor + "/Gestor";
+		Naming.unbind(URLRegistro);
+		System.out.println("Operacion: Servicio Gestor cerrado con exito");
+				
+		//Eliminar Autenticador
+		System.out.println("Operacion: Servicio Autenticador cerrandose...");
+		URLRegistro = "rmi://" + direccionServidor + ":" + puertoServidor + "/Autenticador";
+		Naming.unbind(URLRegistro);	
+		System.out.println("Operacion: Servicio Autenticador cerrado con exito");
+				
+		//Cerrar RMIRegistry del objeto Registry unico
+		try{
+			UnicastRemoteObject.unexportObject(registryServidor,true);
+			System.out.println("Operacion: Registry cerrado con exito");
+		} catch (java.rmi.NoSuchObjectException e){
+			System.err.println("Operacion: Registry no se ha cerrado");
+		}
+	}
+	
+	
+	/**
+	 * Arranca el Registry en el puerto indicado.
+	 * @param int numPuertoRMI, puerto de escucha
+	 * @throws RemoteException
+	 */
+	private static void arrancarRegistro(int numPuertoRMI) throws RemoteException {
+		try {
+			registryServidor = LocateRegistry.getRegistry(numPuertoRMI);
+			registryServidor.list(); // Esta llamada lanza una excepcion si el registro no existe
+		}
+		catch (RemoteException e) {
+			// Registro no valido en este puerto
+			System.out.println("El registro RMI no se puede localizar en el puerto "+ numPuertoRMI);
+			registryServidor =	LocateRegistry.createRegistry(numPuertoRMI);
+			System.out.println("Registro RMI creado en el puerto " + numPuertoRMI);
+		}
+	}
+	
+	
+	/**
+	 * Lista los servicios colgados.
+	 * @param String registryURL, URL que queremos mirar
+	 * @throws RemoteException
+	 * @throws MalformedURLException
+	 */
+	private static void listRegistry(String registryURL) throws RemoteException, MalformedURLException{
+		System.out.println("Registry " + registryURL + " contiene: ");
+		String[] names =Naming.list(registryURL);
+		for  (int i=0; i< names.length; i++)
+		{
+			System.out.println(names[i]);
+		}
+	}
+	
+}

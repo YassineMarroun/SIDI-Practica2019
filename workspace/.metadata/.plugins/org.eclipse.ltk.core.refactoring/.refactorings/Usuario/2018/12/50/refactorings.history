@@ -1,0 +1,4 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<session version="1.0">
+<refactoring comment="Rename method &apos;usuario.Usuario.mostrarTriSeg(...)&apos; to &apos;mostrarTrinosSeguidores&apos;&#x0D;&#x0A;- Original project: &apos;Usuario&apos;&#x0D;&#x0A;- Original element: &apos;usuario.Usuario.mostrarTriSeg(...)&apos;&#x0D;&#x0A;- Renamed element: &apos;usuario.Usuario.mostrarTrinosSeguidores(...)&apos;&#x0D;&#x0A;- Update references to refactored element" delegate="false" deprecate="false" description="Rename method &apos;mostrarTriSeg&apos;" flags="589826" id="org.eclipse.jdt.ui.rename.method" input="/src&lt;usuario{Usuario.java[Usuario~mostrarTriSeg~QString;" name="mostrarTrinosSeguidores" references="true" stamp="1544730595573" version="1.0"/>
+</session>

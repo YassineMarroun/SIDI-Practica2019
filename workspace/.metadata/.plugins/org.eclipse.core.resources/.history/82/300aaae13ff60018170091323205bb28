@@ -1,0 +1,279 @@
+/**
+ * @ (#) Usuario.java
+ * 
+ * Clase que contiene el main de la entidad Usuario.
+ * Los usuarios (clientes) son los actores principales del sistema e interactuan entre ellos enviandose trinos
+ * y haciendose seguidores unos de otros.
+ *
+ * @author Yassine Marroun Nettah
+ * ymarroun1@alumno.uned.es
+ */
+package usuario;
+
+import java.net.MalformedURLException;
+import java.rmi.ConnectException;
+import java.rmi.Naming;
+import java.rmi.NotBoundException;
+import java.rmi.RemoteException;
+import java.rmi.registry.LocateRegistry;
+import java.rmi.registry.Registry;
+
+import common.GUI;
+import common.ServicioAutenticacionInterface;
+import common.ServicioGestorInterface;
+import common.UsuarioObj;
+
+public class Usuario {
+	
+	//Atributos para buscar los servicios del Servidor
+	private static int puerto = 8816;
+	private static ServicioAutenticacionInterface servicioAutenticador;
+	private static ServicioGestorInterface servicioGestor;
+	private static String direccion = "localhost";
+	
+	//Aqui se van a guardar las URL RMI
+	private static String autenticador;
+	private static String gestor;
+	
+	private static UsuarioObj usuario = new UsuarioObj();
+	
+	
+//////////////////////////////////////////////////////////////////////////////////////
+	// atributos para levantar el servicio DiscoCliente
+	// es de suponer que esto es necesario ya que puede ejecutarse
+	// en otra maquina tendriamos que saber la ip nuestra 
+	// y cambiarla por la direccionServicio
+	private static int puertoServicio = 8817;
+	private static Registry registryServicio;
+	private static String direccionServicio = "localhost";
+//////////////////////////////////////////////////////////////////////////////////////
+	
+	public Usuario() {
+		
+	}
+	
+	
+	/**
+	 * main del Usuario, generas las URL usadas en el programa
+	 * @param args
+	 * @throws Exception
+	 */
+	public static void main(String[] args) throws Exception{
+
+		autenticador = "rmi://" + direccion + ":" + puerto + "/autenticador";
+		gestor       = "rmi://" + direccion + ":" + puerto + "/gestor";
+		
+		new Usuario().iniciar();
+		System.exit(0); //Finaliza el programa, return a menu.
+	}
+
+	
+	/**
+	 * Conecta con el Autenticador y muestra el Menu de Inicio de USUARIO.
+	 * @throws Exception
+	 */
+	private void iniciar() throws Exception {
+		
+		//Buscar el objeto en el Servidor para autenticarse
+		String URLRegistro = autenticador; //RMI
+		
+		//Si el Servidor no esta disponible, cierra informando de ello
+		try{
+			servicioAutenticador = (ServicioAutenticacionInterface) Naming.lookup(URLRegistro);
+		
+		//Mostrar menu inicial
+			int opcion = 0;	
+			do{
+				opcion = GUI.menu("de USUARIO",new String[]
+						{"Registrar un nuevo usuario","Hacer login"});
+			
+				switch (opcion){
+					case 1: registrar();break;
+					case 2: autenticar();break;
+				}			
+			}while (opcion!=3);
+		}catch (ConnectException e){
+			System.out.println("Error de conexion, el Servidor no esta disponible, vuelva a intentarlo");
+			String st = GUI.pideDato("Pulse enter para finalizar...");
+		}
+		
+	}
+	
+	
+	/**
+	 * Inicia el registro de un usuario nuevo en el sistema, solicita los datos desde teclado.
+	 * @throws RemoteException
+	 * @throws MalformedURLException 
+	 * @throws NotBoundException 
+	 */
+	private static void registrar() throws RemoteException, MalformedURLException, NotBoundException{
+		String nombre = GUI.pideDato("Introduzca un nombre de Usuario");
+		String nick = GUI.pideDato("Introduzca su NICK de Usuario");
+		String password = GUI.pideDato("Introduzca un password");
+		UsuarioObj usuario = new UsuarioObj(nombre, nick, password);
+		Integer error = servicioAutenticador.registrarUsuario(usuario);
+		switch (error){
+		case 0: System.out.println("USUARIO creado correctamente, puede acceder al sistema pulsando la opcion 2, Hacer login"); break;
+		case -1: System.out.println(nombre + ", ya existe un usuario con el nick" + nick); break;
+		}		
+	}	
+
+	
+	/**
+	 * Inicia la autenticacion de un usuario en el sistema, solicita datos
+	 * y entra en un menu con diferentes opciones de usuario.
+	 * @throws RemoteException
+	 * @throws MalformedURLException 
+	 * @throws NotBoundException 
+	 */
+	private void autenticar() throws RemoteException, MalformedURLException, NotBoundException{
+		
+		String nick = GUI.pideDato("Introduzca su NICK");
+		String password = GUI.pideDato("Introduzca su password");
+		if ((servicioAutenticador.autenticarUsuario(nick, password)) >= 0) {
+			usuario.setNick(nick); //asi la clase almacena el NICK del usuario
+			usuario.setPassword(password);
+			menuUsuario(nick);
+		}
+		else 
+			System.out.println("No existe usuario con ese NICK o PASSWORD incorrrecto.");		
+	}
+	
+	
+	/**
+	 * Solicita que se introduzca un mensaje para el Trino y se lo pasa al servicio gestor.
+	 * @param String nick, se le pasa el nick del usuario
+	 * @throws RemoteException
+	 * @throws MalformedURLException 
+	 * @throws NotBoundException 
+	 */
+	private void enviarTrino(String nick) throws RemoteException, MalformedURLException, NotBoundException{
+		
+		String mensaje = GUI.pideDato("Escriba su TRINO");
+		servicioGestor.enviarTrino(mensaje, nick);
+	}
+
+	
+	/**
+	 * Menu que llama al metodo que inicia la funcionalidad deseada segun la opcion seleccionada.
+	 * @throws RemoteException
+	 * @throws MalformedURLException
+	 * @throws NotBoundException
+	 */
+	private void menuUsuario(String nick) throws RemoteException, MalformedURLException, NotBoundException{
+		int opcion = 0;	
+		do{
+			opcion = GUI.menu("de " + nick,new String[]
+					{"Informacion del Usuario","Enviar Trino","Listar Usuarios del Sistema","Seguir a",
+					"Dejar de seguir a","Borrar trino a los usuarios que todavia no lo han recibido"});				
+			switch (opcion){
+				//case 1: subirFichero();break;
+				case 2: enviarTrino(nick); break;
+				//case 3: borrarFichero();break;
+				//case 4: compartirFichero();break;
+				//case 5: listarFicheros();break;
+				//case 6: listarClientes();break;
+			}			
+		}while (opcion!=7);
+		
+		desconectar();
+	}
+	
+	
+//////////////////////////////////////////////////////////////////////////////////////	
+	
+	/**
+	 * solicita la desconexion 
+	 * @throws RemoteException
+	 */
+	private void desconectar() throws RemoteException{
+		
+		
+		servicioAutenticador.desconectarCliente(1);
+		//si ponemos a 0 la sesion aqui el unbind fallara
+		//miSesion=0;
+	}
+
+
+	/**
+	 * Muestra por pantalla la lista de los clientes registrados y cuales de ellos estan online 
+	 * @throws MalformedURLException
+	 * @throws RemoteException
+	 * @throws NotBoundException
+	 */
+/*	private void listarClientes() throws MalformedURLException, RemoteException, NotBoundException {
+		String URLRegistro = gestor;//RMI
+		ServicioGestorInterface servicioGestor =  (ServicioGestorInterface) Naming.lookup(URLRegistro);
+		
+		String lista = servicioGestor.listarClientes();
+		System.out.println(lista);
+		
+	}
+*/
+	/**
+	 * Muestra los ficheros(compartidos incluidos) que tiene este cliente
+	 * @throws MalformedURLException
+	 * @throws RemoteException
+	 * @throws NotBoundException
+	 */
+/*	private void listarFicheros() throws MalformedURLException, RemoteException, NotBoundException {
+		
+		String URLRegistro = gestor;//RMI
+		ServicioGestorInterface servicioGestor =  (ServicioGestorInterface) Naming.lookup(URLRegistro);
+		
+		//el servicio Gestor solo necesita el id de la sesion del cliente para saber quien es
+		List<String> lista = servicioGestor.listarFicherosCliente(1);
+		System.out.println(lista);
+		
+		
+	}
+*/
+	
+
+	/**
+	 * Se usa para levantar el servicio del Disco Cliente
+	 * @param numPuertoRMI numero de puerto del servicio DiscoCliente
+	 * @throws RemoteException
+	 */
+	private void arrancarRegistro(int numPuertoRMI) throws RemoteException {
+		try {
+			registryServicio = LocateRegistry.getRegistry(numPuertoRMI);
+			registryServicio.list(); // Esta llamada lanza
+			// una excepcion si el registro no existe
+		}
+		catch (RemoteException e) {
+			// Registro no valido en este puerto
+			System.out.println("El registro RMI no se puede localizar en el puerto "+ numPuertoRMI);
+			registryServicio =	LocateRegistry.createRegistry(numPuertoRMI);
+			System.out.println("Registro RMI creado en el puerto " + numPuertoRMI);
+		}
+	}
+
+	/**
+	 * lista los servicios de un puerto
+	 * @param registryURL la direccion del puerto a comprobar
+	 * @throws RemoteException
+	 * @throws MalformedURLException
+	 */
+	private static void listRegistry(String registryURL) throws RemoteException, MalformedURLException{
+		System.out.println("Registry " + registryURL + " contiene: ");
+		String[] names =Naming.list(registryURL);
+		for  (int i=0; i< names.length; i++)
+		{
+			System.out.println(names[i]);
+		}
+	}
+
+	/**
+	 * comprueba si tiene colgados servicios en el la URL
+	 * @param URL
+	 * @return true si no hay servicios en la URL
+	 * @throws RemoteException
+	 * @throws MalformedURLException
+	 */
+	private static boolean estaVacioRegistry(String URL) throws RemoteException, MalformedURLException{
+		String[] names = Naming.list(URL);
+		if (names.length == 0) return true; else return false;		
+	}
+
+}

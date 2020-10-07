@@ -1,0 +1,242 @@
+/**
+ * @ (#) ServicioGestorImpl.java
+ * 
+ * Clase que implementa la interfaz remota ServicioGestorInterface.
+ * Se encarga de gestionar todas las operaciones de los usuarios en relacion a enviar trinos
+ * y hacerse seguidor de otros usuarios.
+ *
+ * @author Yassine Marroun Nettah
+ * ymarroun1@alumno.uned.es
+ */
+package servidor;
+
+import java.net.MalformedURLException;
+import java.rmi.ConnectException;
+import java.rmi.Naming;
+import java.rmi.NotBoundException;
+import java.rmi.RemoteException;
+import java.rmi.server.UnicastRemoteObject;
+import java.util.ArrayList;
+import java.util.HashMap;
+
+import common.CallBackUsuarioInterface;
+import common.GUI;
+import common.ServicioDatosInterface;
+import common.ServicioGestorInterface;
+import common.Trino;
+import common.UsuarioObj;
+import common.Utiles;
+
+public class ServicioGestorImpl extends UnicastRemoteObject implements ServicioGestorInterface{
+
+	private static final long serialVersionUID = 9190993076067019921L;
+	private static ServicioDatosInterface servicioDatos;
+	public static HashMap<String, CallBackUsuarioInterface> mapaClientes;
+	
+	
+	/**
+	 * Contructor necesario al extender UnicastRemoteObject y poder utilizar Naming.
+	 * @throws RemoteException
+	 * @throws MalformedURLException
+	 * @throws NotBoundException
+	 */
+	protected ServicioGestorImpl() throws RemoteException, MalformedURLException, NotBoundException {
+		super();
+		
+		try{
+			servicioDatos = (ServicioDatosInterface) Naming.lookup(Utiles.urlDatos);
+			mapaClientes = new HashMap<String, CallBackUsuarioInterface>();
+		}catch (ConnectException e){
+			System.out.println("\nError de conexion, la Base de Datos no esta disponible, vuelva a intentarlo");
+			GUI.pideDato("Pulse enter para finalizar...");
+			//System.exit(0); //Finaliza el programa.
+		}
+	}
+
+	
+	/**
+	 * Recibe un nick y un objeto CallBackUsuario para guardarlo en el mapa que tenemos en esta clase.
+	 * @param String nick, CallBackUsuarioInterface callbackClientObject
+	 * @throws RemoteException
+	 * @throws MalformedURLException
+	 * @throws NotBoundException
+	 */
+	@Override
+	public synchronized void registrarCallback(String nick, CallBackUsuarioInterface callbackClientObject) throws RemoteException, MalformedURLException, NotBoundException {	
+			
+		mapaClientes.put(nick, callbackClientObject);	
+	}
+	
+	
+	/**
+	 * Recibe un nick, solicita a servicio Datos recuperar este objeto Usuario, y lo devuelve.
+	 * @param String nick
+	 * @return UsuarioObj usuario
+	 * @throws RemoteException
+	 * @throws MalformedURLException
+	 * @throws NotBoundException
+	 */
+	@Override
+	public UsuarioObj recuperarUsuario(String nick)throws RemoteException, MalformedURLException, NotBoundException {
+		
+		UsuarioObj usuario = servicioDatos.recuperarUsuario(nick);
+		return usuario;
+	}
+	
+	
+	/**
+	 * Recibe un UsuarioObj y se lo pasa a servcio Datos para que sea guardado con sus datos actualizados.
+	 * @param UsuarioObj seguidor 
+	 * @throws RemoteException
+	 * @throws MalformedURLException
+	 * @throws NotBoundException
+	 */
+	@Override
+	public void grabarUsuario(UsuarioObj seguidor)throws RemoteException, MalformedURLException, NotBoundException {
+		
+		servicioDatos.grabarUsuario(seguidor);
+	}
+	
+	
+	/**
+	 * Solicita al servicio de Datos el envio de un Trino.
+	 * @param String mensaje, String nick, recibe los datos del trino
+	 * @return boolean
+	 * @throws RemoteException
+	 * @throws MalformedURLException
+	 * @throws NotBoundException
+	 * */
+	@Override
+	public boolean enviarTrino(String mensaje, String nick) throws RemoteException, MalformedURLException, NotBoundException {
+		
+		Trino trino = servicioDatos.enviarTrino(mensaje, nick);
+		enviarTrinoCallBack(trino);
+		return true;
+	}
+	
+	
+	/**
+	 * Se publica el trino en el tablon del seguidor si esta logeado o queda pendiente de ello
+	 * si el seguidor no esta logeado. A continuacion incluye el trino en la lista de trinos de todos los seguidores.
+	 * @param Trino trino
+	 * @throws RemoteException
+	 * @throws MalformedURLException
+	 * @throws NotBoundException
+	 * */
+	private synchronized void enviarTrinoCallBack(Trino trino) throws RemoteException, MalformedURLException, NotBoundException {
+		
+		UsuarioObj usuario = recuperarUsuario(trino.ObtenerNickPropietario());
+		
+		for (String seguidorNick : usuario.getSeguidores()) {
+			
+			UsuarioObj seguidor = recuperarUsuario(seguidorNick);
+			 //Se publica el trino automaticamente en el tablon de los seguidores si estan logeados
+			 CallBackUsuarioInterface cui = mapaClientes.get(seguidorNick);
+			 if (cui!=null) {
+				 cui.notificar("Nuevo Trino > " + trino);
+				 trino.setPendiente(false);
+			 } else {
+				 trino.setPendiente(true);
+				 System.out.println("Seguidor " + seguidorNick + " no conectado"); 
+			 }
+			 //Se incluye el trino en la lista de cada seguidor
+			 if (seguidor != null) {
+				 seguidor.getTrinosLista().add(trino);
+			 } else {
+				 System.out.println("Seguidor " + seguidorNick + " no existente");  
+			 }
+			 grabarUsuario(seguidor);
+		}
+	}
+
+	
+	/**
+	 * Solicita al servicio de Datos un listado de usuarios.
+	 * @return ArrayList<UsuarioObj> el metodo devuelve una lista de tipo UsuarioObj
+	 * @throws RemoteException
+	 * @throws MalformedURLException
+	 * @throws NotBoundException
+	 * */
+	@Override
+	public ArrayList<UsuarioObj> listarUsuarios()throws RemoteException, MalformedURLException, NotBoundException {
+		
+		ArrayList<UsuarioObj> usuariosLista = servicioDatos.listarUsuarios();
+		return usuariosLista;
+		
+	}
+	
+
+	/**
+	 * Solicita al servicio de Datos seguir a un usuario.
+	 * @param String nick, String miNick, nick del usuario a seguir, y miNick para ser incluido en su lista de seguidores
+	 * @return int -2 si no existe el usuario, int -1 si ya estas en la lista de seguidores del usuario,
+	 * @return int 0 si has sido incluido en su lista de seguidores
+	 * @throws RemoteException
+	 * @throws MalformedURLException
+	 * @throws NotBoundException
+	 * */
+	@Override
+	public int seguirA(String nick, String miNick) throws RemoteException, MalformedURLException, NotBoundException {
+		
+		int error = servicioDatos.seguirA(nick, miNick);
+		switch (error){
+		case -2 : GUI.imprime("El usuario " + nick + " no esta registrado"); break;
+		case -1: GUI.imprime(miNick + " ya estaba en la lista de seguidores de " + nick); break;
+		case 0  : GUI.imprime(miNick + " ha sido incluido correctamente en la lista de seguidores de " + nick); break;
+		}
+		return error;
+	}
+	
+	
+	/**
+	 * Solicita al servicio de Datos que ya no sigamos a un usuario.
+	 * @param String nick, String minick, nick del usuario y miNick para ser eliminado de su lista de seguidores
+	 * @return int -2 si no existe el usuario, int -1 si no estas en la lista de seguidores del usuario,
+	 * @return int 0 si hemos sido eliminados de su lista de seguidores
+	 * @throws RemoteException
+	 * @throws MalformedURLException
+	 * @throws NotBoundException
+	 * */
+	@Override
+	public int dejarSeguirA(String nick, String miNick) throws RemoteException, MalformedURLException, NotBoundException {
+		
+		int error = servicioDatos.dejarSeguirA(nick, miNick);
+		switch (error){
+		case -2 : GUI.imprime("El usuario " + nick + " no esta registrado"); break;
+		case -1: GUI.imprime(miNick + " no estaba en la lista de seguidores de " + nick); break;
+		case 0  : GUI.imprime(miNick + " ya no figura en la lista de seguidores de " + nick); break;
+		}		
+		return error;
+	}
+	
+	
+	/**
+	 * Solicita al servicio de Datos que elimine un trino para aquellos seguidores que aun no lo hayan recibido.
+	 * @param String nick, String trino
+	 * @return String, mensaje confirmando la eliminacion del trino
+	 * @throws RemoteException
+	 * @throws MalformedURLException 
+	 * @throws NotBoundException 
+	 */
+	public String borrarTrino(String nick, String trino) throws RemoteException, MalformedURLException, NotBoundException {
+		
+		String mensaje = servicioDatos.borrarTrino(nick, trino);
+		return mensaje;
+	}
+	
+	
+	/**
+	 * Cierra la sesion del Usuario.
+	 * @param String nick
+	 * @throws RemoteException
+	 * @throws MalformedURLException
+	 * @throws NotBoundException
+	 * */
+	@Override
+	public String cerrarUsuario(String nick)throws RemoteException, MalformedURLException, NotBoundException {
+		
+		mapaClientes.remove(nick);
+		String mensaje = (nick + " ha cerrado sesion correctamente");
+		return mensaje;
+	}
+}

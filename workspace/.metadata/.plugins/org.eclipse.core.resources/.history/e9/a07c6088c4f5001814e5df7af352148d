@@ -1,0 +1,327 @@
+/**
+ * @ (#) ServicioDatosImpl.java
+ * 
+ * Clase que implementa la interfaz remota ServicioDatosInterface.
+ * Desarrolla las funciones de una base de datos que relacione Usuarios-Seguidores-Trinos.
+ * Mantiene la lista de usuarios registrados y/o conectados al sistema, junto con sus seguidores y trinos;
+ * y los relaciona permitiendo operaciones tipicas de consulta, añadir y borrado.
+ *
+ * @author Yassine Marroun Nettah
+ * ymarroun1@alumno.uned.es
+ */
+package basedeDatos;
+
+import java.io.File;
+import java.io.IOException;
+import java.net.MalformedURLException;
+import java.rmi.Naming;
+import java.rmi.NotBoundException;
+import java.rmi.RemoteException;
+import java.rmi.server.UnicastRemoteObject;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.Iterator;
+import java.util.List;
+import java.util.Map;
+
+import common.GUI;
+import common.ServicioDatosInterface;
+import common.UsuarioObj;
+
+public class ServicioDatosImpl extends UnicastRemoteObject implements ServicioDatosInterface{
+	
+	private static final long serialVersionUID = 123711131719L;
+	
+	//atributos para buscar el servicio Servidor Operador del Repositorio
+	private static int puertoSrOperador = 7792;
+	//private static ServicioSrOperadorInterface servidorSrOperador;
+	private static String direccionSrOperador = "localhost";
+	private static String nombreSrOperador="sroperador";
+	
+	
+	private Map<String, UsuarioObj> listaUsuarios = new HashMap<String, UsuarioObj>();
+	//Estructuras que mantienen las autenticaciones VOLATILES
+	private Map<Integer, String> sesionCliente = new HashMap<Integer, String>();
+	private Map<String, Integer> clienteSesion = new HashMap<String, Integer>();
+	private Map<Integer, String> sesionRepositorio = new HashMap<Integer, String>();
+	private Map<String, Integer> repositorioSesion = new HashMap<String, Integer>();
+
+	//Estructuras que mantiene el almacen de Clientes y Repositorios registrados PERSISTENTES
+	private Map<Integer, String> almacenIdCliente;// = new HashMap<Integer, String>();
+	private Map<String, Integer> almacenClienteId;// = new HashMap<String, Integer>();
+	private Map<Integer, String> almacenIdRepositorio;// = new HashMap<Integer, String>();
+	private Map<String, Integer> almacenRepositorioId;// = new HashMap<String, Integer>();
+	private Map<Integer,Integer> almacenClienteRepositorio;// = new HashMap<Integer,Integer>();
+	
+	//necesitamos tambien a cada cliente quien le ha compartido
+	private Map<Integer,List<Integer>> almacenClienteFicheros;// = new HashMap<Integer,List<Integer>>();
+	
+	//carpeta donde se mantendra la persistencia
+	private static String carpetaPersistencia = "persistencia";
+	
+	//Metodos
+	/**
+	 * Contructor necesario al extender UnicastRemoteOBject y poder utilizar Naming
+	 * @throws RemoteException
+	 */
+
+	public ServicioDatosImpl() throws RemoteException {
+		super();
+		
+		//cargamos los datos persistentes
+		File persistencia = new File (carpetaPersistencia);
+		if (persistencia.exists()){
+			GUI.imprime("la carpeta de persistencia de datos existe vamos a recuperar los datos");
+		}else{
+			GUI.imprime("la carpeta " + carpetaPersistencia + " no existe");
+			inicializarTablas();
+			persistencia.mkdir();						
+		}
+	}
+	
+	/**
+	 * inicializa las tablas para ser guardadas
+	 */
+	public void inicializarTablas(){
+		almacenIdCliente = new HashMap<Integer, String>();
+		almacenClienteId = new HashMap<String, Integer>();
+		almacenIdRepositorio = new HashMap<Integer, String>();
+		almacenRepositorioId = new HashMap<String, Integer>();
+		almacenClienteRepositorio = new HashMap<Integer,Integer>();
+		almacenClienteFicheros = new HashMap<Integer,List<Integer>>();
+	}
+	
+	
+	/**
+	 * registra un cliente devolviendo un id
+	 * @param nombre el nombre del cliente a registrar
+	 * @param id la sesion
+	 * @return int entero con el id
+	 * @throws RemoteException 
+	 * @throws NotBoundException 
+	 * @throws MalformedURLException 
+	 */
+	public int registrarUsuario(UsuarioObj usuario) throws RemoteException, MalformedURLException, NotBoundException{
+
+		if (listaUsuarios.containsKey(usuario.getNick())) {
+			return 0;	//Existe un usuario con ese NICK
+		}
+		else {
+			listaUsuarios.put(usuario.getNick(), usuario);
+		}
+		return 1; //Usuario registrado correctamente
+	}
+	
+	
+	/**
+	 * Autentica al usuario devolviendo el id
+	 * @param nick el nick de usuario para autenticar
+	 * @param id el entero de sesion
+	 * @return int entero con el id
+	 */
+	@Override
+	public int autenticarUsuario(String nick, String password){
+		if (listaUsuarios.containsKey(nick)) {
+			UsuarioObj usuario = listaUsuarios.get(nick);
+			if (usuario.getPassword().equals(password)) {
+				return 0;
+			} else {
+				return -1;
+			}
+		} else {
+			return -2;
+		}
+	}
+	
+	
+	
+	public boolean enviarTrino(String nick, String trino)throws RemoteException, MalformedURLException, NotBoundException;
+	
+	
+
+	/**
+	 * registra un repositiorio
+	 * @param String el nombre del repositorio
+	 * @param int el id sesion del repositorio
+	 * @return int 0 si ya esta registrada con ese nombre, el id sesion en caso contrario
+	 */
+	@Override
+	public int registrarRepositorio(String nombre, int id) throws RemoteException {
+		if (almacenRepositorioId.containsKey(nombre)) return 0;//ya esta registrada
+		else {
+			almacenRepositorioId.put(nombre, id);
+			almacenIdRepositorio.put(id, nombre);
+		}
+		return id;
+	}
+
+	/**
+	 * devulve la lsita de lcientes con un formato basico de presentacion de datos similar a toString()
+	 * se muestran todos los clientes registrado y se indican si estan online o no.
+	 * @return String la lista de los cliente formateada
+	 */
+    @Override
+    public String listaClientes() throws RemoteException {
+         String clientes = "";
+         for (String nombre : almacenIdCliente.values()) {
+        	 int id = almacenClienteId.get(nombre);
+        	 int estado = 0;
+        	 if (clienteSesion.containsKey(nombre)) estado = 1;
+     		String s = "";
+    		if (estado == 0 ) s = "[OFFLINE]";else s = "[ ONLINE]";
+    		clientes = clientes + "Cliente ["+ s + " id=" + id + ", nombre=" + nombre + "] ";
+         }              
+         return clientes;
+    }
+
+    /**
+     * devuelve la lista de repositorios con un formato basico de presentacion
+     * se muestran todas las repos registradas y si estan online o no
+     * @return String la lista de las repos formateada
+     */
+	@Override
+	public String listaRepositorios() throws RemoteException {
+		String lista = "";
+		
+		Iterator it = almacenIdRepositorio.entrySet().iterator();
+		
+		while (it.hasNext()){
+			Map.Entry e = (Map.Entry)it.next();
+			int id = (Integer) e.getKey();
+			String nombre = (String) e.getValue();
+       	 	int estado = 0;
+       	 	if (repositorioSesion.containsKey(nombre)) estado = 1;
+    		String s = "";
+    		if (estado == 0 ) s = "[OFFLINE]";else s = "[ ONLINE]";
+    		lista = lista + "Repositorio ["+ s + " id=" + id + ", nombre=" + nombre + "] ";
+		}
+		return lista;
+		
+	}
+
+	/**
+	 * devuelve un String con los emparejameintos entre clientes y repos
+	 * recordemos un lciente solo esta en una repo
+	 * se devulve el ide cliente el id repositiorio el nombre cliente y el nombre de la repo
+	 * @return la lsita de las parejas
+	 */
+	@Override
+	public List<String> listarFicherosCliente(int idSesionCliente) {
+		List<String> lista = new ArrayList<String>();
+		//System.out.println(almacenIdRepositorio);
+		//System.out.println(almacenClienteRepositorio);
+		Iterator it = almacenClienteRepositorio.entrySet().iterator();
+		while (it.hasNext()) {
+			Map.Entry e = (Map.Entry)it.next();			
+			int idCliente = (Integer) e.getKey();
+			int idRepositorio = (Integer) e.getValue();
+			String nombreCliente = almacenIdCliente.get(idCliente);
+			String nombreRepositorio = almacenIdRepositorio.get(idRepositorio);
+			//lista = lista + "Pareja Cliente - Repositorio [cliente=" + idCliente + ", repositorio=" + idRepositorio + ", nombreCliente="
+			//+ nombreCliente + ", nombreRepositorio=" + nombreRepositorio + "] ";
+		}
+		//System.out.println("Todavia listaClientesRepositorio: " + lista);
+		return lista;
+	}
+
+	/**
+	 * Elimina a un cliente de las sesion activas
+	 * ojo!!!!! no lo borra del almacen de usuarios registrados, solo cierra la sesion
+	 * podriamos devolver algun codigo de error, pero pasamos de momento
+	 * @param sesion el identificador de la sesion actual
+	 * @return int devuelve 0 sin error otro valor si hay error
+	 */
+	@Override
+	public String desconectarCliente(int sesion) throws RemoteException {
+		String cliente = sesionCliente.get(sesion);
+		sesionCliente.remove(sesion);
+		clienteSesion.remove(cliente);
+		return cliente;
+	}
+
+	/**
+	 * borra la entrada de sesion de una repo, es decir desconecta la repo
+	 * @param int el id sesion de la repo
+	 * @return String el nombre de la repo desconectada
+	 */
+	@Override
+	public String desconectarRepositorio(int sesion) throws RemoteException {
+		String repo = sesionRepositorio.get(sesion);
+		sesionRepositorio.remove(sesion);
+		repositorioSesion.remove(repo);
+		return repo;
+	}
+
+	/**
+	 * busca la priemra repo online que encuentra y devulve su id unico
+	 * @return int el id unico de la primera repo online encontrada
+	 */
+	public int dameRepositorio() {
+		if (repositorioSesion.isEmpty()) {
+			return 0;
+		} else{
+			Iterator it = repositorioSesion.entrySet().iterator();
+			String nombre="";
+			if (it.hasNext()) {
+				Map.Entry e = (Map.Entry)it.next();
+				nombre = (String) e.getKey();
+			}
+			return almacenRepositorioId.get(nombre);
+		}
+	}
+	
+	/**
+	 * devuelve el repositorio de un cliente
+	 * @param int el id unico del cliente
+	 * @return int el id sesion de la repo
+	 */
+	public int dimeRepositorio(int idCliente){		
+		return repositorioSesion.get(almacenIdRepositorio.get(almacenClienteRepositorio.get(idCliente)));
+	}
+
+	/**
+	 * almacena en las tablas un fichero
+	 * @param String el nombre del fichero que queremos subir a la repo
+	 * @param int el id sesion del cliente que va a subir el fichero
+	 * @return el id del cliente que es la carpeta donde se va a subir el fichero
+	 */
+	public int almacenarFichero(String nombreFichero, int idSesionCliente) {
+		//Construimos los metadatos y los almacenamos
+		String nombreCliente = sesionCliente.get(idSesionCliente);
+		int idCliente = almacenClienteId.get(nombreCliente);
+		int idRepositorio = almacenClienteRepositorio.get(idCliente);		
+		List<Integer> l = new ArrayList<Integer>();//la lista de con quien se ha compartido		
+
+		//ahora vamos a agregar el fichero al almacenClienteFicheros
+		//conseguimos la lista de ficheros de este cliente:
+		List<Integer> listaFicheros = almacenClienteFicheros.get(idCliente);
+			GUI.imprime("El fichero ya estaba en la lista, no se han tomado medidas");
+				
+		return idCliente;
+	}
+	
+	/**
+	 * borra todas las entradas de un fichero para los clientes que le pasamos
+	 * @param idFichero el id del fichero a borrar
+	 * @param listaClientes la lista de id donde estan los ficheros
+	 */
+	private void borraDeAlmacenClienteFicheros(int idFichero, List<Integer> listaClientes){
+		System.out.println(almacenClienteFicheros);//vemos la lista antes del borrado
+		for (Integer i : listaClientes){
+			List<Integer> lista = almacenClienteFicheros.get(i);
+			lista.remove(lista.indexOf(idFichero));
+		}
+		System.out.println(almacenClienteFicheros);//vemos la lista despues del borrado, queda la propia entrada de quien llama
+	}
+
+	/**
+	 * devuelve el id unico de un cliente a partir del id sesion
+	 * @param int el id sesion del cliente
+	 * @return int el id unico del cliente
+	 */
+	@Override
+	public int sesion2id(int idsesion){
+		return almacenClienteId.get(sesionCliente.get(idsesion));
+	}
+		
+}

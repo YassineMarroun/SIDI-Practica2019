@@ -1,0 +1,87 @@
+/**
+ * @ (#) ServicioAutenticacionImpl.java
+ * 
+ * Clase que implementa la interfaz remota ServicioAutenticacionInterface.
+ * Se encarga de registrar y de autenticar a los usuarios del sistema.
+ *
+ * @author Yassine Marroun Nettah
+ * ymarroun1@alumno.uned.es
+ */
+package servidor;
+
+import java.net.MalformedURLException;
+import java.rmi.ConnectException;
+import java.rmi.Naming;
+import java.rmi.NotBoundException;
+import java.rmi.RemoteException;
+import java.rmi.server.UnicastRemoteObject;
+
+import common.GUI;
+import common.ServicioAutenticacionInterface;
+import common.ServicioDatosInterface;
+import common.UsuarioObj;
+import common.Utiles;
+
+
+public class ServicioAutenticacionImpl extends UnicastRemoteObject implements ServicioAutenticacionInterface{
+
+	private static final long serialVersionUID = 123711131719L;
+	private ServicioDatosInterface servicioDatos;
+	
+	
+	/**
+	 * Contructor necesario al extender UnicastRemoteObject y poder utilizar Naming.
+	 * @throws RemoteException
+	 * @throws NotBoundException 
+	 * @throws MalformedURLException 
+	 */
+	protected ServicioAutenticacionImpl() throws RemoteException, MalformedURLException, NotBoundException {
+		super();
+
+		try{
+			servicioDatos = (ServicioDatosInterface) Naming.lookup(Utiles.urlDatos);
+		}catch (ConnectException e){
+			System.out.println("\nError de conexion, la Base de Datos no esta disponible, vuelva a intentarlo");
+			GUI.pideDato("Pulse enter para finalizar...");
+		}
+	}
+	
+	
+	/**
+	 * Solicita al Servicio de Datos el registro de un usuario.
+	 * @param UsuarioObj usuario, usuario con los datos a registrar
+	 * @return int 0 si el registro ha sido correcto, int -1 si ya existe un usuario con el nick introducido
+	 * @throws RemoteException
+	 * @throws MalformedURLException 
+	 * @throws NotBoundException 
+	 */
+	@Override
+	public int registrarUsuario(UsuarioObj usuario) throws RemoteException, MalformedURLException, NotBoundException{
+		int error = servicioDatos.registrarUsuario(usuario);
+		switch (error){
+		case 0 : GUI.imprime("Se ha creado correctamente el usuario de " + usuario.getNombre()); break;
+		case -1  : GUI.imprime("Ya existe un usuario con el NICK que ha introducido " + usuario.getNombre()); break;
+		}
+		return error;
+	}
+
+	
+	/**
+	 * Solicita al Servicio de Datos la autenticacion de un usuario.
+	 * @param String nick, String password, datos del usuario que se quiere autenticar
+	 * @return int -2 si el usuario no esta registrado, int -1 si el password no es correcto, int 0 si accede correctamente
+	 * @throws RemoteException
+	 * @throws MalformedURLException 
+	 * @throws NotBoundException 
+	 */
+	@Override
+	public int autenticarUsuario(String nick, String password) throws RemoteException, MalformedURLException, NotBoundException {		
+		int error = servicioDatos.autenticarUsuario(nick, password);
+		switch (error){
+		case -2 : GUI.imprime("El usuario " + nick + " no esta registrado"); break;
+		case -1 : GUI.imprime("Password incorrecto"); break;
+		case 0  : GUI.imprime("Se ha autenticado correctamente " + nick); break;
+		}		
+		return error;
+	}
+}

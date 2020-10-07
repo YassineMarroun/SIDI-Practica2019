@@ -1,0 +1,4 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<session version="1.0">
+<refactoring comment="Copy element &apos;&apos; to &apos;basedeDatos.ServicioDatosImpl.nombreSrOperador&apos;&#x0D;&#x0A;- Original project: &apos;BasedeDatos&apos;&#x0D;&#x0A;- Destination element: &apos;basedeDatos.ServicioDatosImpl.nombreSrOperador&apos;&#x0D;&#x0A;- Original element: &apos;basedeDatos.ServicioDatosImpl.listaUsuarios&apos;" description="Copy field" destination="/src&lt;basedeDatos{ServicioDatosImpl.java[ServicioDatosImpl^nombreSrOperador" element1="/src&lt;basedeDatos{ServicioDatosImpl.java[ServicioDatosImpl^listaUsuarios" flags="589830" id="org.eclipse.jdt.ui.copy" members="1" policy="org.eclipse.jdt.ui.copyMembers" stamp="1543718656351" version="1.0"/>
+</session>
